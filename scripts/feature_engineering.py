@@ -15,8 +15,9 @@ and are documented with their business meaning.
 
 import pandas as pd
 import numpy as np
-from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.feature_selection import SelectKBest, f_classif, mutual_info_classif
 from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
 import warnings
 
 # Suppress warnings
@@ -32,6 +33,10 @@ class FeatureEngineer:
     - Change features (changes in usage over time)
     - Ratio features (meaningful business ratios)
     - Profile features (customer demographics and segments)
+    - Customer value features (lifetime value, revenue stability)
+    - Trend features (slope of behavior changes)
+    - Composite risk scores (aggregated risk indicators)
+    - Interaction features (combinations of existing features)
     
     It also provides feature selection to identify the most predictive features.
     
@@ -42,13 +47,20 @@ class FeatureEngineer:
     correlation_threshold : float, default=0.85
         Threshold for correlation above which features are considered highly correlated
     n_features : int, default=30
-        Number of features to select using SelectKBest
+        Number of features to select using feature selection
+    id_columns : list, default=None
+        List of ID columns to exclude from feature engineering
+    selection_method : str, default='f_classif'
+        Method to use for feature selection ('f_classif', 'mutual_info', or 'model_based')
     """
     
-    def __init__(self, remove_correlated=True, correlation_threshold=0.85, n_features=30):
+    def __init__(self, remove_correlated=True, correlation_threshold=0.85, n_features=30,
+                 id_columns=None, selection_method='f_classif'):
         self.remove_correlated = remove_correlated
         self.correlation_threshold = correlation_threshold
         self.n_features = n_features
+        self.id_columns = id_columns or ['CustomerID']  # Default to CustomerID if not specified
+        self.selection_method = selection_method
         self.selected_features = None
         self.feature_selector = None
         self.scaler = StandardScaler()
@@ -95,12 +107,18 @@ class FeatureEngineer:
         
         # Apply feature selection if it was fit
         if self.selected_features is not None and set(self.selected_features).issubset(set(data_featured.columns)):
-            # Keep only selected features plus ID and target if present
+            # Keep only selected features plus ID columns and target if present
             keep_cols = self.selected_features.copy()
-            if 'CustomerID' in data_featured.columns:
-                keep_cols.append('CustomerID')
+            
+            # Add ID columns
+            for id_col in self.id_columns:
+                if id_col in data_featured.columns:
+                    keep_cols.append(id_col)
+            
+            # Add target if present
             if 'Churn' in data_featured.columns:
                 keep_cols.append('Churn')
+                
             data_featured = data_featured[keep_cols]
         
         return data_featured
@@ -128,6 +146,10 @@ class FeatureEngineer:
         df = self._create_change_features(df)
         df = self._create_ratio_features(df)
         df = self._create_profile_features(df)
+        df = self._create_customer_value_features(df)
+        df = self._create_trend_features(df)
+        df = self._create_composite_risk_features(df)
+        df = self._create_interaction_features(df)
         
         # Remove highly correlated features if specified
         if self.remove_correlated:
@@ -386,6 +408,206 @@ class FeatureEngineer:
         df['LowIncome'] = (df['IncomeGroup'] <= 3).astype(int)
         
         return df
+        
+    def _create_customer_value_features(self, data):
+        """
+        Create features related to customer value and revenue.
+        
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            The input data
+            
+        Returns
+        -------
+        pandas.DataFrame
+            The data with customer value features added
+        """
+        df = data.copy()
+        
+        # Customer lifetime value (revenue * tenure)
+        # Business meaning: Total value of customer relationship, higher values indicate more valuable customers
+        df['CustomerLifetimeValue'] = df['MonthlyRevenue'] * df['MonthsInService']
+        
+        # Revenue stability (standard deviation of percent changes)
+        # Business meaning: How consistent customer spending is, lower values indicate more predictable revenue
+        df['RevenueStability'] = np.abs(df['PercChangeRevenues']).clip(upper=100)
+        df['RevenueStability'] = 100 - df['RevenueStability']  # Invert so higher is more stable
+        
+        # Revenue to service ratio (revenue per active subscription)
+        # Business meaning: Value density of customer relationship, higher values indicate premium customers
+        df['RevenuePerSubscription'] = df['MonthlyRevenue'] / df['ActiveSubs'].clip(lower=1)
+        
+        # High value customer flag
+        # Business meaning: Premium customer indicator
+        revenue_threshold = 100  # Arbitrary threshold, adjust based on data distribution
+        df['HighValueCustomer'] = (df['MonthlyRevenue'] > revenue_threshold).astype(int)
+        
+        return df
+    
+    def _create_trend_features(self, data):
+        """
+        Create features that capture trends in customer behavior.
+        
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            The input data
+            
+        Returns
+        -------
+        pandas.DataFrame
+            The data with trend features added
+        """
+        df = data.copy()
+        
+        # Usage trend direction
+        # Business meaning: Direction of usage pattern, negative values indicate declining usage
+        df['UsageTrendDirection'] = np.sign(df['PercChangeMinutes']).fillna(0)
+        
+        # Revenue trend direction
+        # Business meaning: Direction of revenue pattern, negative values indicate declining revenue
+        df['RevenueTrendDirection'] = np.sign(df['PercChangeRevenues']).fillna(0)
+        
+        # Usage acceleration (rate of change in usage)
+        # Business meaning: How quickly usage is changing, extreme values indicate volatility
+        df['UsageAcceleration'] = df['PercChangeMinutes'] / df['MonthsInService'].clip(lower=1)
+        
+        # Revenue acceleration (rate of change in revenue)
+        # Business meaning: How quickly revenue is changing, extreme values indicate volatility
+        df['RevenueAcceleration'] = df['PercChangeRevenues'] / df['MonthsInService'].clip(lower=1)
+        
+        # Trend consistency (how consistent trends are across metrics)
+        # Business meaning: Alignment of different behavioral indicators, higher values indicate consistent patterns
+        indicators = ['PercChangeMinutes', 'PercChangeRevenues', 'CustomerCareCalls', 'DroppedCalls']
+        directions = []
+        
+        for indicator in indicators:
+            if indicator in df.columns:
+                directions.append(np.sign(df[indicator]))
+        
+        if directions:
+            # Calculate the average direction (-1 to 1)
+            df['TrendConsistency'] = sum(directions) / len(directions)
+            # Convert to absolute value (0 to 1) where 1 is perfectly consistent (all same direction)
+            df['TrendConsistency'] = df['TrendConsistency'].abs()
+        
+        return df
+    
+    def _create_composite_risk_features(self, data):
+        """
+        Create composite risk scores that aggregate multiple risk factors.
+        
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            The input data
+            
+        Returns
+        -------
+        pandas.DataFrame
+            The data with composite risk features added
+        """
+        df = data.copy()
+        
+        # Service quality risk score
+        # Business meaning: Overall service quality issues, higher values indicate higher risk
+        service_factors = [
+            df['DroppedCalls'] > 0,
+            df['BlockedCalls'] > 0,
+            df['UnansweredCalls'] > 0,
+            df['CustomerCareCalls'] > 2  # Arbitrary threshold
+        ]
+        df['ServiceQualityRiskScore'] = sum(factor.astype(int) for factor in service_factors)
+        
+        # Financial risk score
+        # Business meaning: Financial indicators of churn risk, higher values indicate higher risk
+        financial_factors = [
+            df['PercChangeRevenues'] < -10,  # Significant revenue decline
+            df['OverageMinutes'] > 0,        # Has overages
+            df['MonthlyRevenue'] < 50,       # Low revenue (arbitrary threshold)
+            df['RecurringRevenueRatio'] < 0.5 # Low recurring revenue ratio
+        ]
+        df['FinancialRiskScore'] = sum(factor.astype(int) for factor in financial_factors)
+        
+        # Engagement risk score
+        # Business meaning: Engagement indicators of churn risk, higher values indicate higher risk
+        engagement_factors = [
+            df['MonthsInService'] <= 3,      # New customer
+            df['CallsPerMonth'] < 10,        # Low usage (arbitrary threshold)
+            df['SpecialFeaturesUsed'] == 0,   # No special features used
+            df['ReferralsMadeBySubscriber'] == 0  # No referrals made
+        ]
+        df['EngagementRiskScore'] = sum(factor.astype(int) for factor in engagement_factors)
+        
+        # Overall churn risk score (weighted combination of risk factors)
+        # Business meaning: Aggregate risk of churn, higher values indicate higher risk
+        df['ChurnRiskScore'] = (
+            df['ServiceQualityRiskScore'] * 0.4 +
+            df['FinancialRiskScore'] * 0.4 +
+            df['EngagementRiskScore'] * 0.2
+        )
+        
+        # Normalize to 0-100 scale
+        max_risk = 4*0.4 + 4*0.4 + 4*0.2  # Maximum possible risk score
+        df['ChurnRiskScore'] = (df['ChurnRiskScore'] / max_risk) * 100
+        
+        return df
+    
+    def _create_interaction_features(self, data):
+        """
+        Create interaction features that capture relationships between existing features.
+        
+        Parameters
+        ----------
+        data : pandas.DataFrame
+            The input data
+            
+        Returns
+        -------
+        pandas.DataFrame
+            The data with interaction features added
+        """
+        df = data.copy()
+        
+        # New customer with service issues
+        # Business meaning: New customers experiencing problems are at very high risk
+        df['NewCustomerWithProblems'] = (
+            (df['IsNewCustomer'] == 1) &
+            (df['TotalProblemCalls'] > 0)
+        ).astype(int)
+        
+        # High value customer with service issues
+        # Business meaning: Valuable customers experiencing problems require immediate attention
+        if 'HighValueCustomer' in df.columns:
+            df['HighValueCustomerWithProblems'] = (
+                (df['HighValueCustomer'] == 1) &
+                (df['TotalProblemCalls'] > 0)
+            ).astype(int)
+        
+        # Service issues with declining usage
+        # Business meaning: Service problems leading to reduced usage indicate high churn risk
+        df['ServiceIssuesWithDecliningUsage'] = (
+            (df['TotalProblemCalls'] > 0) &
+            (df['PercChangeMinutes'] < 0)
+        ).astype(int)
+        
+        # Multiple retention attempts without success
+        # Business meaning: Customer resistant to retention efforts
+        df['FailedRetentionAttempts'] = (
+            (df['RetentionCalls'] > 1) &
+            (df['RetentionOffersAccepted'] == 0)
+        ).astype(int)
+        
+        # High tech adoption with service issues
+        # Business meaning: Tech-savvy customers with problems may be more likely to research competitors
+        if 'TechSavvyScore' in df.columns:
+            df['TechSavvyWithProblems'] = (
+                (df['TechSavvyScore'] > 0) &
+                (df['TotalProblemCalls'] > 0)
+            ).astype(int)
+        
+        return df
     
     def _remove_correlated_features(self, data):
         """
@@ -405,8 +627,9 @@ class FeatureEngineer:
         
         # Keep ID and target columns
         cols_to_keep = []
-        if 'CustomerID' in df.columns:
-            cols_to_keep.append('CustomerID')
+        for id_col in self.id_columns:
+            if id_col in df.columns:
+                cols_to_keep.append(id_col)
         if 'Churn' in df.columns:
             cols_to_keep.append('Churn')
         
@@ -430,7 +653,7 @@ class FeatureEngineer:
     
     def _select_important_features(self, data):
         """
-        Select the most important features using SelectKBest.
+        Select the most important features using the specified selection method.
         
         Parameters
         ----------
@@ -444,10 +667,11 @@ class FeatureEngineer:
         """
         df = data.copy()
         
-        # Separate features from target and ID
+        # Separate features from target and ID columns
         X = df.drop(['Churn'], axis=1)
-        if 'CustomerID' in X.columns:
-            X = X.drop(['CustomerID'], axis=1)
+        for id_col in self.id_columns:
+            if id_col in X.columns:
+                X = X.drop([id_col], axis=1)
         y = df['Churn']
         
         # Convert categorical columns to numeric
@@ -459,9 +683,46 @@ class FeatureEngineer:
                 X_numeric = pd.concat([X_numeric, dummies], axis=1)
                 X_numeric = X_numeric.drop(col, axis=1)
         
-        # Apply feature selection
-        self.feature_selector = SelectKBest(f_classif, k=min(self.n_features, X_numeric.shape[1]))
-        self.feature_selector.fit(X_numeric, y)
+        # Apply feature selection based on the specified method
+        if self.selection_method == 'mutual_info':
+            # Use mutual information for feature selection (better for non-linear relationships)
+            self.feature_selector = SelectKBest(
+                mutual_info_classif,
+                k=min(self.n_features, X_numeric.shape[1])
+            )
+            self.feature_selector.fit(X_numeric, y)
+            
+        elif self.selection_method == 'model_based':
+            # Use a Random Forest model for feature selection
+            model = RandomForestClassifier(n_estimators=100, random_state=42)
+            model.fit(X_numeric, y)
+            
+            # Get feature importances
+            importances = model.feature_importances_
+            indices = np.argsort(importances)[::-1][:self.n_features]
+            
+            # Create a mask of selected features
+            mask = np.zeros(X_numeric.shape[1], dtype=bool)
+            mask[indices] = True
+            
+            # Create a selector-like object for consistency
+            class ModelSelector:
+                def __init__(self, mask):
+                    self.mask = mask
+                def get_support(self, indices=False):
+                    if indices:
+                        return np.where(self.mask)[0]
+                    return self.mask
+            
+            self.feature_selector = ModelSelector(mask)
+            
+        else:  # default to f_classif
+            # Use ANOVA F-value for feature selection
+            self.feature_selector = SelectKBest(
+                f_classif,
+                k=min(self.n_features, X_numeric.shape[1])
+            )
+            self.feature_selector.fit(X_numeric, y)
         
         # Get selected feature names
         selected_indices = self.feature_selector.get_support(indices=True)
@@ -484,8 +745,11 @@ class FeatureEngineer:
         
         # Return data with only selected features
         keep_cols = self.selected_features.copy()
-        if 'CustomerID' in df.columns:
-            keep_cols.append('CustomerID')
+        
+        # Add back ID columns and target
+        for id_col in self.id_columns:
+            if id_col in df.columns:
+                keep_cols.append(id_col)
         keep_cols.append('Churn')
         
         return df[keep_cols]
