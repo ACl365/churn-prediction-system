@@ -1,146 +1,91 @@
-# TeleChurn Predictor: Telecom Customer Churn Prediction System
+# Telecom Customer Churn Prediction System
 
-![TeleChurn Predictor Banner](https://github.com/ACl365/churn-prediction-system/raw/main/assets/banner.png)
+A machine learning system for predicting customer churn in a telecom company.
 
-## 📊 Project Overview
-
-TeleChurn Predictor is a sophisticated machine learning system designed to predict customer churn in the telecommunications industry with high accuracy. This end-to-end solution combines advanced feature engineering, ensemble modeling techniques, and an interactive dashboard to help telecom companies proactively identify at-risk customers and implement targeted retention strategies.
-
-## 🔍 Business Problem
-
-Customer churn (the loss of clients or customers) presents a significant challenge for telecom companies:
-
-- The average monthly churn rate in the telecom industry ranges from 2-3%
-- Acquiring a new customer costs 5-25 times more than retaining an existing one
-- A 5% increase in customer retention can increase profits by 25-95%
-
-TeleChurn Predictor addresses this challenge by:
-1. Identifying customers at high risk of churning before they leave
-2. Providing actionable insights into churn factors
-3. Enabling targeted retention campaigns to maximize ROI
-4. Monitoring churn metrics in real-time through an interactive dashboard
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 project/
-├── data/                    # Data directory
-│   ├── raw/                 # Raw data files
-│   └── processed/           # Processed datasets
-├── notebooks/               # Jupyter notebooks for exploration
-│   ├── 01_eda.ipynb         # Exploratory data analysis
-│   ├── 02_feature_eng.ipynb # Feature engineering experiments (to be created)
-│   └── 03_modeling.ipynb    # Model development and evaluation (to be created)
-├── telechurn/               # Main package
-│   ├── data/                # Data processing modules
-│   │   └── preprocessing.py # Data preprocessing module
-│   ├── features/            # Feature engineering (to be created)
-│   ├── models/              # Model implementations (to be created)
-│   └── utils/               # Utility functions (to be created)
-├── scripts/                 # Utility scripts
-│   └── setup_data.py        # Script to set up data
-└── README.md                # Project documentation
+├── data/
+│   ├── raw/                  # Raw data files
+│   └── processed/            # Processed data files
+├── models/                   # Saved models
+├── notebooks/                # Jupyter notebooks
+│   ├── 03_model_training_evaluation.ipynb         # Model Training and Evaluation
+│   ├── 03_model_training_evaluation_updated.ipynb # Updated Training Notebook
+│   ├── 04_model_deployment.ipynb                  # Model Deployment
+│   └── test_imports.ipynb                         # Test Imports
+└── scripts/                  # Python scripts
+    ├── base_model.py                # Base model class
+    ├── gradient_boosting.py         # XGBoost and LightGBM implementations
+    ├── neural_network.py            # Neural Network implementation
+    ├── training_pipeline.py         # Training pipeline
+    ├── utils.py                     # Utility functions
+    ├── prepare_data.py              # Data preparation script
+    └── fix_notebook.py              # Notebook fixing script
 ```
 
-## 🚀 Getting Started
+## Features
 
-### Prerequisites
+- **Multiple Model Support**: Implements XGBoost, LightGBM, and Neural Network models
+- **Class Imbalance Handling**: Uses SMOTE for handling imbalanced classes
+- **Hyperparameter Tuning**: Supports hyperparameter optimization
+- **Threshold Optimization**: Finds optimal classification threshold
+- **Cross-Validation**: Evaluates models using k-fold cross-validation
+- **Feature Importance**: Visualizes feature importance for model interpretability
+- **Model Comparison**: Compares different models on key metrics
+- **Feature Alignment**: Ensures consistent features between training and prediction
+- **Robust Evaluation**: Handles edge cases like single-class datasets
 
-- Python 3.8+
-- Required packages: pandas, numpy, scikit-learn, matplotlib, seaborn, jupyter
-
-### Setup
+## Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/ACl365/churn-prediction-system.git
-   cd churn-prediction-system
-   ```
-
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Set up the data:
-   ```bash
-   python scripts/setup_data.py
-   ```
-
-## 📊 Data Exploration
-
-The project includes a comprehensive exploratory data analysis notebook that examines:
-
-- Data structure and quality
-- Feature distributions and relationships
-- Missing value analysis
-- Correlation analysis
-- Target variable distribution and relationships
-- Outlier detection
-
-To run the EDA notebook:
 ```bash
-jupyter notebook notebooks/01_eda.ipynb
+git clone https://github.com/yourusername/telecom-churn-prediction.git
+cd telecom-churn-prediction
 ```
 
-## 🔧 Data Preprocessing
-
-The `telechurn/data/preprocessing.py` module handles:
-
-- Loading raw telecom data
-- Cleaning and handling missing values
-- Encoding categorical variables
-- Scaling numerical features
-- Creating feature groups
-- Preparing data for modeling
-
-Example usage:
-```python
-from telechurn.data.preprocessing import TelecomDataPreprocessor
-
-# Initialize preprocessor
-preprocessor = TelecomDataPreprocessor()
-
-# Process and save data
-preprocessor.process_and_save(
-    train_path="data/raw/cell2celltrain.csv",
-    output_train_path="data/processed/train_processed.csv",
-    holdout_path="data/raw/cell2cellholdout.csv",
-    output_holdout_path="data/processed/holdout_processed.csv"
-)
+2. Install the required packages:
+```bash
+pip install -r requirements.txt
 ```
 
-## 📝 Next Steps
+## Usage
 
-The project is currently in development with the following components planned:
+### Data Preparation
 
-1. **Feature Engineering Module**:
-   - Create advanced features from raw telecom data
-   - Implement feature selection techniques
-   - Develop domain-specific transformations
+```bash
+python scripts/prepare_data.py
+```
 
-2. **Model Development**:
-   - Implement ensemble models (Random Forest, XGBoost, etc.)
-   - Perform hyperparameter optimization
-   - Evaluate model performance
+### Model Training
 
-3. **Deployment**:
-   - Create a prediction API
-   - Develop a dashboard for visualizing results
-   - Implement model monitoring
+Run the Jupyter notebook:
+```bash
+jupyter notebook notebooks/03_model_training_evaluation_updated.ipynb
+```
 
-## 📜 License
+### Model Deployment
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Run the deployment notebook:
+```bash
+jupyter notebook notebooks/04_model_deployment.ipynb
+```
 
-## 📧 Contact
+## Model Performance
 
-Alexander Clarke - [alexanderclarke365@gmail.com](mailto:alexanderclarke365@gmail.com)
+The system evaluates models using multiple metrics:
+- Accuracy
+- Precision
+- Recall
+- F1 Score
+- ROC AUC
+- Average Precision
 
-Project Link: [https://github.com/ACl365/churn-prediction-system](https://github.com/ACl365/churn-prediction-system)
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
